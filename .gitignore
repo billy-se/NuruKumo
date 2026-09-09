@@ -1,0 +1,16 @@
+.vs
+bin/
+obj/
+.exe
+.vscode/
+
+```
+nomoredeleting/bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+*.log
+
+```
