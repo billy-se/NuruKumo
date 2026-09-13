@@ -80,6 +80,7 @@ namespace nomoredeleting
 
         //Bot setup
         private Dictionary<string, AutoMovingSprite> _movingSprite = new Dictionary<string, AutoMovingSprite>();
+        private List<MovingBot> movingArmies = new List<MovingBot>();
 
         //main character
         Player _player;
@@ -162,11 +163,11 @@ namespace nomoredeleting
             _spriteBatch = new SpriteBatch(GraphicsDevice);
             _font = Content.Load<SpriteFont>("DebugFont");
 
+            Texture2D botTexture = Content.Load<Texture2D>("llama");
 
-            
-            
+            //movingArmies.Add(new MovingBot(new Vector2(100,100), botTexture));
 
-
+            //it must something calculated within bounds
             //setting up bot
             Texture2D _botPlayerTexture0 = Content.Load<Texture2D>("SpriteBot1(nharry)");
             _movingSprite["harry"] = (new AutoMovingSprite(_botPlayerTexture0, new Vector2(960, 540), new Vector2(1920, 1080), 1f, "harry"));
@@ -197,7 +198,7 @@ namespace nomoredeleting
             Texture2D textureTree = Content.Load<Texture2D>("trees");
             _trees = new List<Tree>()
             {
-                new Tree(){Position = new Vector2(5,5), Texture=textureTree },
+                new Tree(){Position = new Vector2(20,5), Texture=textureTree },
                 new Tree(){Position = new Vector2(10,10), Texture=textureTree }
             };
 
@@ -229,20 +230,28 @@ namespace nomoredeleting
                         };
                         tiles.Add(new Tile(selectedTiles, new Vector2(x * sizeTiles, y * sizeTiles)));
                         _waterTiles[x, y] = false;
-                        AvailDeploy = false ;
+                        AvailDeploy = true ;
                         PositionDeploy = new Vector2(x*sizeTiles, y*sizeTiles);
                     }
                 }
             }
-            _listOfWater = _listWaveWTile.Select(t => t._position).ToList();
+            _listOfWater = _listWaveWTile.Select(t => t._position).ToList();//sus
             var deployable = tiles.Where(t => !_listWaveWTile.Any(w => w._position == t.position)).ToList();
-            var land = deployable[random.Next(deployable.Count)];
+            var land = deployable[random.Next(deployable.Count)];//sus
             // TODO: use this.Content to load your game content here
             _playerTexture = Content.Load<Texture2D>("LUM");//Player characterto
-            if (!AvailDeploy )
+            if (AvailDeploy )
             {
                 _player = new Player(_playerTexture, new Vector2(land.position.X, land.position.Y));//setting up the player position
                 AvailDeploy = false;
+            }
+            for (int i=0;i<5;i++)
+            {
+                if(deployable.Count > 0)
+                {
+                    var randomLand = deployable[random.Next(deployable.Count)];
+                    movingArmies.Add(new MovingBot(new Vector2(randomLand.position.X, randomLand.position.Y), botTexture));
+                }
             }
         }
 
@@ -279,9 +288,9 @@ namespace nomoredeleting
             {
                 var (x, y, depth) = _waterQueue.Dequeue();
 
-                if (depth >= maxDepth) continue;//0 >= 15
-                if (x < 0 || y < 0 || x >= rows || y >= cols) continue;//if 1<0||1<0||1>=row..
-                if (TileIsWater(x, y)) continue;
+                if (depth >= maxDepth) continue;//0 >= 15/maxDepth
+                if (x < 0 || y < 0 || x >= rows || y >= cols) continue;//if 1<0||1<0||1>=row../skip if out of bounds
+                if (TileIsWater(x, y)) continue;//stop when its already fill
 
                 Vector2 position = new Vector2(x * sizeTiles, y * sizeTiles);
 
@@ -413,7 +422,10 @@ namespace nomoredeleting
 
             _showStats = (currentKeyboardState.IsKeyDown(Keys.LeftShift) || currentKeyboardState.IsKeyDown(Keys.RightShift));
 
-
+            foreach (var bot in movingArmies)
+            {
+                bot.Update(gameTime, _listOfWater);
+            }
             _previousKeyboardState = currentKeyboardState;
             // TODO: Add your update logic here
 
@@ -455,6 +467,10 @@ namespace nomoredeleting
             {
                 tree.Draw(_spriteBatch);
             }
+            foreach (var bot in movingArmies)
+            {
+                bot.Draw(_spriteBatch);
+            }
             foreach (var cloud in _clouds)
             {
                 cloud.Draw(_spriteBatch);
@@ -479,8 +495,8 @@ namespace nomoredeleting
             if (popupScreenTiming > 0f)
             {
                 _spriteBatch.Draw(textureMainBackgroundSettings, rectMainBackgroundSettings, Color.White*popupScreenTiming);
-                
             }
+
 
             _spriteBatch.End();
             // TODO: Add your drawing code here
