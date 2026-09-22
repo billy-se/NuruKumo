@@ -44,20 +44,20 @@ namespace nomoredeleting
             KeyboardState keyboard = Keyboard.GetState();
             Vector2 currentMovement = position;
             
-                if (keyboard.IsKeyDown(Keys.W))
+                if (keyboard.IsKeyDown(Keys.W) || keyboard.IsKeyDown(Keys.Up))
                 {
                     currentMovement.Y -= speed * delta;
                 }
-                if (keyboard.IsKeyDown(Keys.S))
+                if (keyboard.IsKeyDown(Keys.S) || keyboard.IsKeyDown(Keys.Down))
                 {
                     currentMovement.Y += speed * delta;
                 }
-                if (keyboard.IsKeyDown(Keys.A))
+                if (keyboard.IsKeyDown(Keys.A) || keyboard.IsKeyDown(Keys.Left))
                 {
                     currentMovement.X -= speed * delta;
                     spriteEffects = SpriteEffects.FlipHorizontally;
                 }
-                if (keyboard.IsKeyDown(Keys.D))
+                if (keyboard.IsKeyDown(Keys.D) || keyboard.IsKeyDown(Keys.Right))
                 {
                     currentMovement.X += speed * delta;
                     spriteEffects = SpriteEffects.None;

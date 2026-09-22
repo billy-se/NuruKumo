@@ -85,6 +85,9 @@ namespace nomoredeleting
         //main character
         Player _player;
         Texture2D _playerTexture;
+        Texture2D swimFrames;
+        Texture2D airFrames;
+        private Whale massiveWhale;
 
         //ground setup
         //displaying ground
@@ -194,6 +197,19 @@ namespace nomoredeleting
             dirtTile = Content.Load<Texture2D>("Dirtorpath");
             rockTile = Content.Load<Texture2D>("rock");
 
+            List<Texture2D> swimFrames = new List<Texture2D>
+            {
+                Content.Load<Texture2D>("whaleFin"),
+                Content.Load<Texture2D>("whaleSwim")
+            };
+
+            List<Texture2D> airFrames = new List<Texture2D>
+            {
+                Content.Load<Texture2D>("ikam"),
+                Content.Load<Texture2D>("ikam2"),
+                Content.Load<Texture2D>("ikam3")
+            };
+
             //coordinate of trees deploy
             Texture2D textureTree = Content.Load<Texture2D>("trees");
             _trees = new List<Tree>()
@@ -237,6 +253,7 @@ namespace nomoredeleting
             }
             _listOfWater = _listWaveWTile.Select(t => t._position).ToList();//sus
             var deployable = tiles.Where(t => !_listWaveWTile.Any(w => w._position == t.position)).ToList();
+            var deployableForWhale = tiles.Where(t => _listWaveWTile.Any(w => w._position == t.position)).ToList();
             var land = deployable[random.Next(deployable.Count)];//sus
             // TODO: use this.Content to load your game content here
             _playerTexture = Content.Load<Texture2D>("LUM");//Player characterto
@@ -245,7 +262,7 @@ namespace nomoredeleting
                 _player = new Player(_playerTexture, new Vector2(land.position.X, land.position.Y));//setting up the player position
                 AvailDeploy = false;
             }
-            for (int i=0;i<5;i++)
+            for (int i=0;i<20;i++)
             {
                 if(deployable.Count > 0)
                 {
@@ -253,6 +270,10 @@ namespace nomoredeleting
                     movingArmies.Add(new MovingBot(new Vector2(randomLand.position.X, randomLand.position.Y), botTexture));
                 }
             }
+            
+            var randomWater = deployableForWhale[random.Next(deployableForWhale.Count)];
+            massiveWhale = new Whale(swimFrames, airFrames, new Vector2(randomWater.position.X, randomWater.position.Y));      
+            
         }
 
         void SpreadWater(int startX, int startY, int radius)
@@ -417,6 +438,11 @@ namespace nomoredeleting
                 _displayTimer = 2f;
                 _fadeAlpha = 1f;
             }
+            
+            if (currentKeyboardState.IsKeyDown(Keys.LeftShift) || currentKeyboardState.IsKeyDown(Keys.RightShift) && currentKeyboardState.IsKeyDown(Keys.T)) {
+                Random random = new Random();
+                _player.position = new Vector2(random.Next(100, 1900), random.Next(100,1000));
+            }
 
             HandleInput(gameTime, currentKeyboardState);
 
@@ -426,6 +452,8 @@ namespace nomoredeleting
             {
                 bot.Update(gameTime, _listOfWater);
             }
+
+            massiveWhale.Update(gameTime, GraphicsDevice, _listOfWater);
             _previousKeyboardState = currentKeyboardState;
             // TODO: Add your update logic here
 
@@ -438,8 +466,6 @@ namespace nomoredeleting
             _mousePositionDisplay = $"Mouse Position - X: {mouseX}, Y: {mouseY}";
             _deltaDisplay = $"Delta Position - X: {deltaX}, Y: {deltaY}";
             _spriteBatch.Begin();
-
-
 
             //displaying
             foreach (var tile in tiles)
@@ -480,6 +506,8 @@ namespace nomoredeleting
 
             xyPlayerPosition = $"Player - X: {_player.position.X:F2}, Y: {_player.position.Y:F2}";
             botCount = $"Total Bots: {_botManager._bots.Count.ToString()}";
+
+            massiveWhale.Draw(_spriteBatch);
 
             if (!string.IsNullOrEmpty(_currentDialogue))
             {
