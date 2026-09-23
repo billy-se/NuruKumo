@@ -17,15 +17,19 @@ namespace nomoredeleting
         private float airScale = 8f;
         private float speed = 150f;
 
-        private enum WhaleState {Swimming, Airborne }
+        private enum WhaleState {Swimming, Airborne, Paused }
         private WhaleState currentState = WhaleState.Swimming;
 
         private Vector2 targetWaterPosition;
         private float timer = 0f;
         private float frameTimer = 0f;
+        private float pauseTimer = 0f;
+        private float pauseDuration = 0f;
         private Random random = new Random();
 
-        public Whale(List<Texture2D> swimFrames, List<Texture2D> airFrames, Vector2 startPosition)
+        private List<LSystemTree> _trees;
+
+        public Whale(List<Texture2D> swimFrames, List<Texture2D> airFrames, Vector2 startPosition, List<LSystemTree> trees)
         {
             swimmingFrames = swimFrames;
             airborneFrames = airFrames;
@@ -33,6 +37,7 @@ namespace nomoredeleting
             position = startPosition;
             targetWaterPosition = startPosition;
             scale = swimScale;
+            _trees = trees;
         }
         public int ScaleWidth => (int)(currentTexture.Width * scale);
         public int ScaleHeight => (int)(currentTexture.Height * scale);
@@ -47,8 +52,41 @@ namespace nomoredeleting
         public void Update(GameTime gameTime, GraphicsDevice graphicsDevice, List<Vector2> waterTiles)
         {
             float delta = (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+            if (currentState == WhaleState.Paused)
+            {
+                pauseTimer += delta;
+                if (pauseTimer >= pauseDuration)
+                {
+                    currentState = WhaleState.Airborne;
+                    pauseTimer = 0f;
+                }
+                return;
+            }
+
             timer += delta;
             frameTimer += delta;
+
+            foreach (var tree in _trees.ToList())
+            {
+                if (Bound.Contains(tree.Position))
+                {
+                    currentState = WhaleState.Paused;
+                    pauseTimer = 0f;
+                    pauseDuration = 3f + (float)random.NextDouble() *2f;
+
+                    int choice = random.Next(1,4);
+
+                    if (choice == 1)
+                    {
+                        _trees.Remove(tree);
+                    } else if (choice == 2)
+                    {
+                        tree.Iterations++;
+                    }
+                    break;
+                }
+            }
 
             if (frameTimer > 0.15f)
             {
@@ -66,13 +104,13 @@ namespace nomoredeleting
             if (currentState == WhaleState.Swimming)
             {
                 scale = swimScale;
-                speed = 100f;
+                speed = 300f;
 
                 timer += delta;
-                if (timer > 4f)
+                if (timer > 7f)
                 {
                     currentState = WhaleState.Airborne;
-                    targetWaterPosition = new Vector2(random.Next(100, graphicsDevice.Viewport.Width - 200), random.Next(100, graphicsDevice.Viewport.Height - 200));
+                    targetWaterPosition = new Vector2(random.Next(100, graphicsDevice.Viewport.Width - 300), random.Next(100, graphicsDevice.Viewport.Height - 300));
                     timer = 0f;
                 }
 
@@ -94,11 +132,11 @@ namespace nomoredeleting
             else if (currentState == WhaleState.Airborne)
             {
                 scale = airScale;
-                speed = 300f;
+                speed = 100f;
 
                 Vector2 direction = targetWaterPosition - position;
 
-                if (direction.Length() > 10f)
+                if (direction.Length() > 3f)
                 {
                     direction.Normalize();
                     position += direction * speed * delta;
@@ -130,6 +168,7 @@ namespace nomoredeleting
         public void Draw(SpriteBatch spriteBatch)
         {
             Color drawColor = (currentState == WhaleState.Airborne) ? Color.LightBlue : Color.White;
+            if (currentState == WhaleState.Paused) drawColor = Color.Red;
             spriteBatch.Draw(currentTexture, position, null, drawColor, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
         }
     }

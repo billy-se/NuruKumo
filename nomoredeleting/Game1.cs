@@ -87,7 +87,7 @@ namespace nomoredeleting
         Texture2D _playerTexture;
         Texture2D swimFrames;
         Texture2D airFrames;
-        private Whale massiveWhale;
+        private List<Whale> massiveWhale = new List<Whale>();
 
         //ground setup
         //displaying ground
@@ -225,7 +225,7 @@ namespace nomoredeleting
                 {
                     double lowChanceWater = random.NextDouble();
                     int SelectTiles = random.Next(0, 5);
-                    if (SelectTiles == 1 && lowChanceWater <= 0.3)
+                    if (SelectTiles == 1 && lowChanceWater <= 0.7)
                     {
                         
                         SpreadWaterRecursive(x, y, 2);
@@ -262,18 +262,16 @@ namespace nomoredeleting
                 _player = new Player(_playerTexture, new Vector2(land.position.X, land.position.Y));//setting up the player position
                 AvailDeploy = false;
             }
-            for (int i=0;i<20;i++)
+            for (int i=0;i<10;i++)
             {
                 if(deployable.Count > 0)
                 {
                     var randomLand = deployable[random.Next(deployable.Count)];
                     movingArmies.Add(new MovingBot(new Vector2(randomLand.position.X, randomLand.position.Y), botTexture));
                 }
-            }
-            
-            var randomWater = deployableForWhale[random.Next(deployableForWhale.Count)];
-            massiveWhale = new Whale(swimFrames, airFrames, new Vector2(randomWater.position.X, randomWater.position.Y));      
-            
+                var randomWater = deployableForWhale[random.Next(deployableForWhale.Count)];
+                massiveWhale.Add(new Whale(swimFrames, airFrames, new Vector2(randomWater.position.X, randomWater.position.Y), _lSystemTrees));
+            }      
         }
 
         void SpreadWater(int startX, int startY, int radius)
@@ -348,6 +346,9 @@ namespace nomoredeleting
 
         }
 
+        private int frameCount = 0;
+        private double elapsedTimer = 0;
+        private int currentFPS = 0;
 
         protected override void Update(GameTime gameTime)
         {
@@ -439,7 +440,7 @@ namespace nomoredeleting
                 _fadeAlpha = 1f;
             }
             
-            if (currentKeyboardState.IsKeyDown(Keys.LeftShift) || currentKeyboardState.IsKeyDown(Keys.RightShift) && currentKeyboardState.IsKeyDown(Keys.T)) {
+            if (currentKeyboardState.IsKeyDown(Keys.LeftShift) && currentKeyboardState.IsKeyDown(Keys.RightShift) || currentKeyboardState.IsKeyDown(Keys.T)) {
                 Random random = new Random();
                 _player.position = new Vector2(random.Next(100, 1900), random.Next(100,1000));
             }
@@ -452,10 +453,31 @@ namespace nomoredeleting
             {
                 bot.Update(gameTime, _listOfWater);
             }
-
-            massiveWhale.Update(gameTime, GraphicsDevice, _listOfWater);
+            foreach (var whale in massiveWhale) 
+            {
+                whale.Update(gameTime, GraphicsDevice, _listOfWater);
+            }
             _previousKeyboardState = currentKeyboardState;
             // TODO: Add your update logic here
+
+            elapsedTimer += gameTime.ElapsedGameTime.TotalMilliseconds;
+            frameCount++;
+
+            if (elapsedTimer >= 1000.0)
+            {
+                currentFPS = frameCount;
+
+                long totalMemory = GC.GetTotalMemory(false);
+                double memoryInMB = totalMemory / (1024.0 * 1024.0);
+                int gen0 = GC.CollectionCount(0);
+                int gen1 = GC.CollectionCount(1);
+                int gen2 = GC.CollectionCount(2);
+
+                Console.WriteLine($"FPS: {currentFPS} | Memory: {memoryInMB:F2} MB | GC Counts -> Gen0: {gen0}, Gen1: {gen1}, Gen2: {gen2}");
+
+                frameCount = 0;
+                elapsedTimer = 0;
+            }
 
             base.Update(gameTime);
         }
@@ -476,12 +498,11 @@ namespace nomoredeleting
             {
                 waterTile.Draw(_spriteBatch);
             }
-            
             foreach (var bot in _movingSprite)
             {
                 bot.Value.Draw(_spriteBatch);
             }
-            foreach (Tree tree in _trees)
+            foreach (Tree tree in _trees) //watch
             {
                 Vector2 pixelPosition = new Vector2(tree.Position.X * sizeTiles, tree.Position.Y * sizeTiles);
 
@@ -493,21 +514,23 @@ namespace nomoredeleting
             {
                 tree.Draw(_spriteBatch);
             }
-            foreach (var bot in movingArmies)
-            {
-                bot.Draw(_spriteBatch);
-            }
-            foreach (var cloud in _clouds)
-            {
-                cloud.Draw(_spriteBatch);
-            }
-            _mapDisplay.Draw(_spriteBatch);
             //displaying text 
 
             xyPlayerPosition = $"Player - X: {_player.position.X:F2}, Y: {_player.position.Y:F2}";
             botCount = $"Total Bots: {_botManager._bots.Count.ToString()}";
 
-            massiveWhale.Draw(_spriteBatch);
+            foreach (var bot in movingArmies)
+            {
+                bot.Draw(_spriteBatch);
+            }
+            foreach (var whale in massiveWhale)
+            {
+                whale.Draw(_spriteBatch);
+            }
+            foreach (var cloud in _clouds)
+            {
+                cloud.Draw(_spriteBatch);
+            }
 
             if (!string.IsNullOrEmpty(_currentDialogue))
             {
@@ -524,7 +547,7 @@ namespace nomoredeleting
             {
                 _spriteBatch.Draw(textureMainBackgroundSettings, rectMainBackgroundSettings, Color.White*popupScreenTiming);
             }
-
+            _mapDisplay.Draw(_spriteBatch);
 
             _spriteBatch.End();
             // TODO: Add your drawing code here
@@ -580,6 +603,7 @@ namespace nomoredeleting
             tree3.SetTreeType("willow");
             _lSystemTrees.Add(tree3);
         }
+
         double holdSeconds = 0;
         bool trigger = false;
         public void HandleInput(GameTime gameTime, KeyboardState keyboard)
