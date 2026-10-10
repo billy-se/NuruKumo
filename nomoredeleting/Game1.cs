@@ -97,6 +97,31 @@ namespace nomoredeleting
         public int cols = 64;
         List<Tile> tiles = new List<Tile>();
         Texture2D rockTile, waterTile, dirtTile, grassTile;
+
+        //3d
+
+        private Vector3 cameraPosition = new Vector3(0, 1.5f, 0);
+        private float yaw = 0f;
+        private float pitch = 0f;
+
+        private Matrix viewMatrix;
+        private Matrix projectionMatrix;
+
+        private MouseState _previousMouseState;
+
+        private bool gameHasStarted = true;
+        private bool isTransitioning = false;
+        private float fadeTimer = 0f;
+
+        private enum GameState
+        {
+            Random2DSimulation,
+            RestaurantObserver
+        }
+
+        private BasicEffect _basicEffect;
+
+        private GameState currentGameState = GameState.Random2DSimulation;
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
@@ -352,113 +377,142 @@ namespace nomoredeleting
 
         protected override void Update(GameTime gameTime)
         {
-            //initialize mouse and delta coor
-            _mouseState = Mouse.GetState();
-            if (SettingsClick)
-            {
-                popupScreenTiming += 5f * (float)gameTime.ElapsedGameTime.TotalSeconds;
-                popupScreenTiming = MathHelper.Clamp(popupScreenTiming, 0f, 1f);
-            }
-            else
-            {
-                popupScreenTiming -= 5f * (float)gameTime.ElapsedGameTime.TotalSeconds;
-                popupScreenTiming = MathHelper.Clamp(popupScreenTiming, 0f, 1f);
-            }
-
-            if (rectSettings.Contains(_mouseState.Position) && _mouseState.LeftButton == ButtonState.Pressed){
-                SettingsClick = !SettingsClick;
-            }
-
-            mouseX = _mouseState.X;
-            mouseY = _mouseState.Y;
-            deltaX = mouseX - screenCenteredX;
-            deltaY = mouseY - screenCenteredY;
-            MouseState testMouse = Mouse.GetState();
-            Debug.WriteLine($"Mouse RAW: {testMouse.X}, {testMouse.Y}");
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
-                Exit();
-            KeyboardState currentKeyboardState = Keyboard.GetState();
-            //display waterMove
-            if (currentKeyboardState.IsKeyDown(Keys.M) && _previousKeyboardState.IsKeyDown(Keys.M))
+                    Exit();
+            if (currentGameState == GameState.Random2DSimulation)
             {
-                _mapDisplay.Toggle();
-            }
-
-            foreach (var waterTile in _listWaveWTile)
-            {
-                waterTile.Update(gameTime);
-            }
-
-
-
-            _mapDisplay.Update(gameTime, _graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
-            foreach (var cloud in _clouds)
-            {
-                cloud.Update(_graphics.PreferredBackBufferWidth);
-            }
-
-            //fading text structure
-            if (!string.IsNullOrEmpty(_currentDialogue))
-            {
-                _displayTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
-
-                if (_displayTimer <= 1f)
+                //initialize mouse and delta coor
+                _mouseState = Mouse.GetState();
+                if (SettingsClick)
                 {
-                    _fadeAlpha = _displayTimer;
+                    popupScreenTiming += 5f * (float)gameTime.ElapsedGameTime.TotalSeconds;
+                    popupScreenTiming = MathHelper.Clamp(popupScreenTiming, 0f, 1f);
+                }
+                else
+                {
+                    popupScreenTiming -= 5f * (float)gameTime.ElapsedGameTime.TotalSeconds;
+                    popupScreenTiming = MathHelper.Clamp(popupScreenTiming, 0f, 1f);
                 }
 
-                if (_displayTimer <= 0f)
+                if (rectSettings.Contains(_mouseState.Position) && _mouseState.LeftButton == ButtonState.Pressed){
+                    SettingsClick = !SettingsClick;
+                }
+
+                mouseX = _mouseState.X;
+                mouseY = _mouseState.Y;
+                deltaX = mouseX - screenCenteredX;
+                deltaY = mouseY - screenCenteredY;
+                MouseState testMouse = Mouse.GetState();
+                Debug.WriteLine($"Mouse RAW: {testMouse.X}, {testMouse.Y}");
+            
+                KeyboardState currentKeyboardState = Keyboard.GetState();
+                //display waterMove
+                if (currentKeyboardState.IsKeyDown(Keys.M) && _previousKeyboardState.IsKeyDown(Keys.M))
                 {
-                    _currentDialogue = "";
+                    _mapDisplay.Toggle();
+                }
+
+                foreach (var waterTile in _listWaveWTile)
+                {
+                    waterTile.Update(gameTime);
+                }
+
+
+
+                _mapDisplay.Update(gameTime, _graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
+                foreach (var cloud in _clouds)
+                {
+                    cloud.Update(_graphics.PreferredBackBufferWidth);
+                }
+
+                //fading text structure
+                if (!string.IsNullOrEmpty(_currentDialogue))
+                {
+                    _displayTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+                    if (_displayTimer <= 1f)
+                    {
+                        _fadeAlpha = _displayTimer;
+                    }
+
+                    if (_displayTimer <= 0f)
+                    {
+                        _currentDialogue = "";
+                        _fadeAlpha = 1f;
+                    }
+                }
+
+                //repeating music
+                if (_musicLoaded && MediaPlayer.State != MediaState.Playing)
+                {
+                    MediaPlayer.IsRepeating = true;
+                    MediaPlayer.Play(song);
+                }
+
+                //updatingclasses
+                
+                _player.Update(gameTime,GraphicsDevice,_listOfWater);
+                _botManager.Update(gameTime);
+
+                foreach (var bot in _movingSprite)
+                {
+                    bot.Value.Update(gameTime);
+                }
+
+                //for pressing T
+                if (currentKeyboardState.IsKeyDown(Keys.T) && _previousKeyboardState.IsKeyUp(Keys.T))
+                {
+
+                    _currentDialogue = _botManager.TalkToClosestBot(_player.position, 30f);
+                    _displayTimer = 2f;
                     _fadeAlpha = 1f;
                 }
-            }
+                
+                if (currentKeyboardState.IsKeyDown(Keys.LeftShift) && currentKeyboardState.IsKeyDown(Keys.RightShift) || currentKeyboardState.IsKeyDown(Keys.T)) {
+                    Random random = new Random();
+                    _player.position = new Vector2(random.Next(100, 1900), random.Next(100,1000));
+                }
 
-            //repeating music
-            if (_musicLoaded && MediaPlayer.State != MediaState.Playing)
+                HandleInput(gameTime, currentKeyboardState);
+
+                _showStats = (currentKeyboardState.IsKeyDown(Keys.LeftShift) || currentKeyboardState.IsKeyDown(Keys.RightShift));
+
+                foreach (var bot in movingArmies)
+                {
+                    bot.Update(gameTime, _listOfWater);
+                }
+
+                bool allWhalesDead = false;
+
+                foreach (var whale in massiveWhale.ToList()) 
+                {
+                    whale.Update(gameTime, GraphicsDevice, _listOfWater);
+
+                    if (!whale.IsAlive)
+                    {
+                        massiveWhale.Remove(whale);
+                    }
+                }
+
+                if (massiveWhale.Count == 0 && gameHasStarted && !isTransitioning) {
+                    isTransitioning = true;
+                }
+
+                if (isTransitioning)
+                {
+                    fadeTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+                    if (fadeTimer >= 3f)
+                    {
+                        LoadRestaurantScene();
+                    }
+                }
+                _previousKeyboardState = currentKeyboardState;
+                // TODO: Add your update logic here
+            }else if (currentGameState == GameState.RestaurantObserver)
             {
-                MediaPlayer.IsRepeating = true;
-                MediaPlayer.Play(song);
+                UpdateRestaurantCamera(gameTime);
             }
-
-            //updatingclasses
-            
-            _player.Update(gameTime,GraphicsDevice,_listOfWater);
-            _botManager.Update(gameTime);
-
-            foreach (var bot in _movingSprite)
-            {
-                bot.Value.Update(gameTime);
-            }
-
-            //for pressing T
-            if (currentKeyboardState.IsKeyDown(Keys.T) && _previousKeyboardState.IsKeyUp(Keys.T))
-            {
-
-                _currentDialogue = _botManager.TalkToClosestBot(_player.position, 30f);
-                _displayTimer = 2f;
-                _fadeAlpha = 1f;
-            }
-            
-            if (currentKeyboardState.IsKeyDown(Keys.LeftShift) && currentKeyboardState.IsKeyDown(Keys.RightShift) || currentKeyboardState.IsKeyDown(Keys.T)) {
-                Random random = new Random();
-                _player.position = new Vector2(random.Next(100, 1900), random.Next(100,1000));
-            }
-
-            HandleInput(gameTime, currentKeyboardState);
-
-            _showStats = (currentKeyboardState.IsKeyDown(Keys.LeftShift) || currentKeyboardState.IsKeyDown(Keys.RightShift));
-
-            foreach (var bot in movingArmies)
-            {
-                bot.Update(gameTime, _listOfWater);
-            }
-            foreach (var whale in massiveWhale) 
-            {
-                whale.Update(gameTime, GraphicsDevice, _listOfWater);
-            }
-            _previousKeyboardState = currentKeyboardState;
-            // TODO: Add your update logic here
 
             elapsedTimer += gameTime.ElapsedGameTime.TotalMilliseconds;
             frameCount++;
@@ -484,74 +538,79 @@ namespace nomoredeleting
 
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(Color.CornflowerBlue);
-            _mousePositionDisplay = $"Mouse Position - X: {mouseX}, Y: {mouseY}";
-            _deltaDisplay = $"Delta Position - X: {deltaX}, Y: {deltaY}";
-            _spriteBatch.Begin();
+            if (currentGameState == GameState.Random2DSimulation) 
+            {
+                GraphicsDevice.Clear(Color.CornflowerBlue);
+                _mousePositionDisplay = $"Mouse Position - X: {mouseX}, Y: {mouseY}";
+                _deltaDisplay = $"Delta Position - X: {deltaX}, Y: {deltaY}";
+                _spriteBatch.Begin();
 
-            //displaying
-            foreach (var tile in tiles)
-            {
-                tile.Draw(_spriteBatch);
-            }
-            foreach (var waterTile in _listWaveWTile)
-            {
-                waterTile.Draw(_spriteBatch);
-            }
-            foreach (var bot in _movingSprite)
-            {
-                bot.Value.Draw(_spriteBatch);
-            }
-            foreach (Tree tree in _trees) //watch
-            {
-                Vector2 pixelPosition = new Vector2(tree.Position.X * sizeTiles, tree.Position.Y * sizeTiles);
+                //displaying
+                foreach (var tile in tiles)
+                {
+                    tile.Draw(_spriteBatch);
+                }
+                foreach (var waterTile in _listWaveWTile)
+                {
+                    waterTile.Draw(_spriteBatch);
+                }
+                foreach (var bot in _movingSprite)
+                {
+                    bot.Value.Draw(_spriteBatch);
+                }
+                foreach (Tree tree in _trees) //watch
+                {
+                    Vector2 pixelPosition = new Vector2(tree.Position.X * sizeTiles, tree.Position.Y * sizeTiles);
 
-                _spriteBatch.Draw(tree.Texture, pixelPosition, null, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
-            }
-            _player.Draw(_spriteBatch);
-            _botManager.Draw(_spriteBatch);
-            foreach (var tree in _lSystemTrees)
-            {
-                tree.Draw(_spriteBatch);
-            }
-            //displaying text 
+                    _spriteBatch.Draw(tree.Texture, pixelPosition, null, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+                }
+                _player.Draw(_spriteBatch);
+                _botManager.Draw(_spriteBatch);
+                foreach (var tree in _lSystemTrees)
+                {
+                    tree.Draw(_spriteBatch);
+                }
+                //displaying text 
 
-            xyPlayerPosition = $"Player - X: {_player.position.X:F2}, Y: {_player.position.Y:F2}";
-            botCount = $"Total Bots: {_botManager._bots.Count.ToString()}";
+                xyPlayerPosition = $"Player - X: {_player.position.X:F2}, Y: {_player.position.Y:F2}";
+                botCount = $"Total Bots: {_botManager._bots.Count.ToString()}";
 
-            foreach (var bot in movingArmies)
-            {
-                bot.Draw(_spriteBatch);
-            }
-            foreach (var whale in massiveWhale)
-            {
-                whale.Draw(_spriteBatch);
-            }
-            foreach (var cloud in _clouds)
-            {
-                cloud.Draw(_spriteBatch);
-            }
+                foreach (var bot in movingArmies)
+                {
+                    bot.Draw(_spriteBatch);
+                }
+                foreach (var whale in massiveWhale)
+                {
+                    whale.Draw(_spriteBatch);
+                }
+                foreach (var cloud in _clouds)
+                {
+                    cloud.Draw(_spriteBatch);
+                }
 
-            if (!string.IsNullOrEmpty(_currentDialogue))
-            {
-                _spriteBatch.DrawString(_font, _currentDialogue, new Vector2(800, 990), Color.Yellow * _fadeAlpha);
-            }
-            _spriteBatch.DrawString(_font, xyPlayerPosition, new Vector2(10, 1045), Color.Red);
-            _spriteBatch.DrawString(_font, botCount, new Vector2(10, 1010), Color.Red);
-            _spriteBatch.DrawString(_font, _mousePositionDisplay, new Vector2(10, 975), Color.Red);
-            _spriteBatch.DrawString(_font, _deltaDisplay, new Vector2(10, 940), Color.Red);
-            _spriteBatch.DrawString(_font, IsActive.ToString(), new Vector2(10, 900), Color.White);
-            if (_showStats) _spriteBatch.DrawString(_font, "Show Stats", new Vector2(500, 500), Color.Red);
-            _spriteBatch.Draw(textureSettings, rectSettings, Color.White);
-            if (popupScreenTiming > 0f)
-            {
-                _spriteBatch.Draw(textureMainBackgroundSettings, rectMainBackgroundSettings, Color.White*popupScreenTiming);
-            }
-            _mapDisplay.Draw(_spriteBatch);
+                if (!string.IsNullOrEmpty(_currentDialogue))
+                {
+                    _spriteBatch.DrawString(_font, _currentDialogue, new Vector2(800, 990), Color.Yellow * _fadeAlpha);
+                }
+                _spriteBatch.DrawString(_font, xyPlayerPosition, new Vector2(10, 1045), Color.Red);
+                _spriteBatch.DrawString(_font, botCount, new Vector2(10, 1010), Color.Red);
+                _spriteBatch.DrawString(_font, _mousePositionDisplay, new Vector2(10, 975), Color.Red);
+                _spriteBatch.DrawString(_font, _deltaDisplay, new Vector2(10, 940), Color.Red);
+                _spriteBatch.DrawString(_font, IsActive.ToString(), new Vector2(10, 900), Color.White);
+                if (_showStats) _spriteBatch.DrawString(_font, "Show Stats", new Vector2(500, 500), Color.Red);
+                _spriteBatch.Draw(textureSettings, rectSettings, Color.White);
+                if (popupScreenTiming > 0f)
+                {
+                    _spriteBatch.Draw(textureMainBackgroundSettings, rectMainBackgroundSettings, Color.White*popupScreenTiming);
+                }
+                _mapDisplay.Draw(_spriteBatch);
 
-            _spriteBatch.End();
-            // TODO: Add your drawing code here
-
+                _spriteBatch.End();
+                // TODO: Add your drawing code here
+            } else if (currentGameState == GameState.RestaurantObserver)
+            {
+                DrawRestaurant3D();
+            }
             base.Draw(gameTime);
         }
 
@@ -656,6 +715,236 @@ namespace nomoredeleting
             foreach (var tree in _lSystemTrees)
             {
                 tree.SetTreeType(_currentTypeTree);
+            }
+        }
+
+        private void LoadRestaurantScene()
+        {
+            currentGameState = GameState.RestaurantObserver;
+
+            MediaPlayer.Stop();
+            _lSystemTrees?.Clear();
+            _clouds?.Clear();
+            _listWaveWTile?.Clear();
+
+            _basicEffect = new BasicEffect(GraphicsDevice)
+            {
+                VertexColorEnabled = true
+            };
+
+            cameraPosition = new Vector3(0f, 1.2f, -1.5f);
+            yaw = 0f;
+            pitch = 0f;
+            
+            fadeTimer = 0f;
+            _previousMouseState = Mouse.GetState();
+        }
+
+        private void UpdateRestaurantCamera(GameTime gameTime)
+        {
+            MouseState currentMouseState = Mouse.GetState();
+
+            float deltaX = currentMouseState.X - _previousMouseState.X;
+            float deltaY = currentMouseState.Y - _previousMouseState.Y;
+
+            float sensitivity = 0.002f;
+            yaw -= deltaX * sensitivity;
+            pitch -= deltaY * sensitivity;
+
+            pitch = MathHelper.Clamp(pitch, -MathHelper.PiOver4, MathHelper.PiOver4);
+
+            _previousMouseState = currentMouseState;
+
+            Vector3 direction = new Vector3(
+                (float)(Math.Cos(pitch) * Math.Sin(yaw)),
+                (float)Math.Sin(pitch),
+                (float)(Math.Cos(pitch) * Math.Cos(yaw))
+            );
+
+            Vector3 target = cameraPosition + direction;
+
+            viewMatrix = Matrix.CreateLookAt(cameraPosition, target, Vector3.Up);
+            
+            projectionMatrix = Matrix.CreatePerspectiveFieldOfView(
+                MathHelper.ToRadians(60f),
+                GraphicsDevice.Viewport.AspectRatio, 
+                0.1f, 
+                100f
+            );
+        }
+
+        private void DrawRestaurant3D()
+        {
+            GraphicsDevice.Clear(new Color(12, 20, 35));
+
+            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
+
+            _basicEffect.View = viewMatrix;
+            _basicEffect.Projection = projectionMatrix;
+            _basicEffect.World = Matrix.Identity;
+
+            DepthStencilState depthState = new DepthStencilState() { DepthBufferEnable = true };
+            GraphicsDevice.DepthStencilState = depthState;
+
+            foreach (var pass in _basicEffect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+
+            VertexPositionColor[] leftWallFront = new VertexPositionColor[]
+            {
+                new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 0f,  1f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, 1f), new Color(40, 45, 52)),
+
+                new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, 1f), new Color(40, 45, 52)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, 4f), new Color(40, 45, 52)),
+            };
+            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallFront, 0, 2);
+
+            VertexPositionColor[] leftWallBack = new VertexPositionColor[]
+            {
+                new VertexPositionColor(new Vector3(-7f, 0f, -1f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
+
+                new VertexPositionColor(new Vector3(-7f, 0f, -1f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, -1f), new Color(40, 45, 52)),
+            };
+            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallBack, 0, 2);
+
+            VertexPositionColor[] leftWallTop = new VertexPositionColor[]
+            {
+                new VertexPositionColor(new Vector3(-7f, 3.0f,  1f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 3.0f, -1f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, -1f), new Color(40, 45, 52)),
+
+                new VertexPositionColor(new Vector3(-7f, 3.0f,  1f), new Color(55, 60, 68)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f, -1f), new Color(40, 45, 52)),
+                new VertexPositionColor(new Vector3(-7f, 4.5f,  1f), new Color(40, 45, 52)),
+            };
+            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallTop, 0, 2);
+
+                VertexPositionColor[] ceilingVertices = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(20, 15, 12)),
+                    new VertexPositionColor(new Vector3( 7f, 4.5f, -7f), new Color(20, 15, 12)),
+                    new VertexPositionColor(new Vector3( 7f, 4.5f,  4f), new Color(20, 15, 12)),
+
+                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(20, 15, 12)),
+                    new VertexPositionColor(new Vector3( 7f, 4.5f,  4f), new Color(20, 15, 12)),
+                    new VertexPositionColor(new Vector3(-7f, 4.5f,  4f), new Color(20, 15, 12)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, ceilingVertices, 0, 2);
+
+                VertexPositionColor[] leftWallVertices = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
+                    new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(55, 60, 68)),
+                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
+
+                    new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
+                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
+                    new VertexPositionColor(new Vector3(-7f, 4.5f,  4f), new Color(40, 45, 52)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallVertices, 0, 2);
+
+                VertexPositionColor[] rightWallVertices = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(7f, 0f, -7f), new Color(55, 60, 68)),
+                    new VertexPositionColor(new Vector3(7f, 0f,  4f), new Color(55, 60, 68)),
+                    new VertexPositionColor(new Vector3(7f, 4.5f,  4f), new Color(40, 45, 52)),
+
+                    new VertexPositionColor(new Vector3(7f, 0f, -7f), new Color(55, 60, 68)),
+                    new VertexPositionColor(new Vector3(7f, 4.5f,  4f), new Color(40, 45, 52)),
+                    new VertexPositionColor(new Vector3(7f, 4.5f, -7f), new Color(40, 45, 52)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, rightWallVertices, 0, 2);
+
+                VertexPositionColor[] backWallLeft = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3(-2.5f, 0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3(-2.5f, 4.5f, -7f), new Color(50, 38, 30)),
+
+                    new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3(-2.5f, 4.5f, -7f), new Color(50, 38, 30)),
+                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(50, 38, 30)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallLeft, 0, 2);
+
+                VertexPositionColor[] backWallRight = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(2.5f, 0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3(7f, 0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3(7f, 4.5f, -7f), new Color(50, 38, 30)),
+
+                    new VertexPositionColor(new Vector3(2.5f, 0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3(7f, 4.5f, -7f), new Color(50, 38, 30)),
+                    new VertexPositionColor(new Vector3(2.5f, 4.5f, -7f), new Color(50, 38, 30)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallRight, 0, 2);
+
+                VertexPositionColor[] backWallTop = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-2.5f, 3.0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3( 2.5f, 3.0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3( 2.5f, 4.5f, -7f), new Color(50, 38, 30)),
+
+                    new VertexPositionColor(new Vector3(-2.5f, 3.0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3( 2.5f, 4.5f, -7f), new Color(50, 38, 30)),
+                    new VertexPositionColor(new Vector3(-2.5f, 4.5f, -7f), new Color(50, 38, 30)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallTop, 0, 2);
+
+                VertexPositionColor[] backWallBottom = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-2.5f, 0.0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3( 2.5f, 0.0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3( 2.5f, 0.8f, -7f), new Color(55, 42, 33)),
+
+                    new VertexPositionColor(new Vector3(-2.5f, 0.0f, -7f), new Color(65, 50, 40)),
+                    new VertexPositionColor(new Vector3( 2.5f, 0.8f, -7f), new Color(55, 42, 33)),
+                    new VertexPositionColor(new Vector3(-2.5f, 0.8f, -7f), new Color(55, 42, 33)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallBottom, 0, 2);
+
+                VertexPositionColor[] tableTopVertices = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-1.1f, 0.5f, -0.8f), new Color(90, 56, 32)),
+                    new VertexPositionColor(new Vector3( 1.1f, 0.5f, -0.8f), new Color(90, 56, 32)),
+                    new VertexPositionColor(new Vector3( 1.1f, 0.5f, -2.2f), new Color(75, 45, 25)),
+
+                    new VertexPositionColor(new Vector3(-1.1f, 0.5f, -0.8f), new Color(90, 56, 32)),
+                    new VertexPositionColor(new Vector3( 1.1f, 0.5f, -2.2f), new Color(75, 45, 25)),
+                    new VertexPositionColor(new Vector3(-1.1f, 0.5f, -2.2f), new Color(75, 45, 25)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, tableTopVertices, 0, 2);
+
+                VertexPositionColor[] tableStandVertices = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-0.15f, 0.0f, -1.4f), new Color(40, 25, 15)),
+                    new VertexPositionColor(new Vector3( 0.15f, 0.0f, -1.4f), new Color(40, 25, 15)),
+                    new VertexPositionColor(new Vector3( 0.15f, 0.5f, -1.4f), new Color(60, 38, 22)),
+
+                    new VertexPositionColor(new Vector3(-0.15f, 0.0f, -1.4f), new Color(40, 25, 15)),
+                    new VertexPositionColor(new Vector3( 0.15f, 0.5f, -1.4f), new Color(60, 38, 22)),
+                    new VertexPositionColor(new Vector3(-0.15f, 0.5f, -1.4f), new Color(60, 38, 22)),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, tableStandVertices, 0, 2);
+
+                VertexPositionColor[] cupVertices = new VertexPositionColor[]
+                {
+                    new VertexPositionColor(new Vector3(-0.12f, 0.5f, -1.4f), Color.Gold),
+                    new VertexPositionColor(new Vector3( 0.12f, 0.5f, -1.4f), Color.Gold),
+                    new VertexPositionColor(new Vector3( 0.12f, 0.85f, -1.4f), Color.Orange),
+
+                    new VertexPositionColor(new Vector3(-0.12f, 0.5f, -1.4f), Color.Gold),
+                    new VertexPositionColor(new Vector3( 0.12f, 0.85f, -1.4f), Color.Orange),
+                    new VertexPositionColor(new Vector3(-0.12f, 0.85f, -1.4f), Color.Orange),
+                };
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, cupVertices, 0, 2);
             }
         }
     }

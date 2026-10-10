@@ -29,6 +29,8 @@ namespace nomoredeleting
 
         private List<LSystemTree> _trees;
 
+        public bool IsAlive { get; private set; } = true;
+
         public Whale(List<Texture2D> swimFrames, List<Texture2D> airFrames, Vector2 startPosition, List<LSystemTree> trees)
         {
             swimmingFrames = swimFrames;
@@ -75,14 +77,15 @@ namespace nomoredeleting
                     pauseTimer = 0f;
                     pauseDuration = 3f + (float)random.NextDouble() *2f;
 
-                    int choice = random.Next(1,4);
+                    int choice = random.Next(1,3);
 
                     if (choice == 1)
                     {
                         _trees.Remove(tree);
                     } else if (choice == 2)
                     {
-                        tree.Iterations++;
+                        _trees.Remove(tree);
+                        IsAlive = false;
                     }
                     break;
                 }
