@@ -7,6 +7,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using nomoredeleting.Managers;
+using nomoredeleting.Renderers;
 
 namespace nomoredeleting
 {
@@ -100,6 +102,9 @@ namespace nomoredeleting
 
         //3d
 
+        private RestaurantManager _restaurantManager;
+        private RestaurantRenderer _restaurantRenderer;
+
         private Vector3 cameraPosition = new Vector3(0, 1.5f, 0);
         private float yaw = 0f;
         private float pitch = 0f;
@@ -113,13 +118,15 @@ namespace nomoredeleting
         private bool isTransitioning = false;
         private float fadeTimer = 0f;
 
+        private BasicEffect _basicEffect;
+
+        private List<Vector3> _tablePositions = new List<Vector3>();
+
         private enum GameState
         {
             Random2DSimulation,
             RestaurantObserver
         }
-
-        private BasicEffect _basicEffect;
 
         private GameState currentGameState = GameState.Random2DSimulation;
         public Game1()
@@ -145,6 +152,9 @@ namespace nomoredeleting
 
             _lSystemTrees = new List<LSystemTree>();//INITIALIZE LSYSTEMTREE
             _clouds = new List<Cloud>();
+
+            _restaurantManager = new RestaurantManager();
+            _restaurantRenderer = new RestaurantRenderer(GraphicsDevice);
 
             base.Initialize();
         }
@@ -287,7 +297,7 @@ namespace nomoredeleting
                 _player = new Player(_playerTexture, new Vector2(land.position.X, land.position.Y));//setting up the player position
                 AvailDeploy = false;
             }
-            for (int i=0;i<10;i++)
+            for (int i=0;i<0;i++)
             {
                 if(deployable.Count > 0)
                 {
@@ -609,7 +619,7 @@ namespace nomoredeleting
                 // TODO: Add your drawing code here
             } else if (currentGameState == GameState.RestaurantObserver)
             {
-                DrawRestaurant3D();
+                _restaurantRenderer.Draw(GraphicsDevice, viewMatrix, projectionMatrix, _restaurantManager.Tables);
             }
             base.Draw(gameTime);
         }
@@ -718,48 +728,68 @@ namespace nomoredeleting
             }
         }
 
-        private void LoadRestaurantScene()
-        {
+       private void LoadRestaurantScene()
+       {
             currentGameState = GameState.RestaurantObserver;
-
             MediaPlayer.Stop();
-            _lSystemTrees?.Clear();
-            _clouds?.Clear();
-            _listWaveWTile?.Clear();
 
-            _basicEffect = new BasicEffect(GraphicsDevice)
-            {
-                VertexColorEnabled = true
-            };
+            _restaurantManager.GenerateTables();
 
             cameraPosition = new Vector3(0f, 1.2f, -1.5f);
             yaw = 0f;
             pitch = 0f;
-            
-            fadeTimer = 0f;
-            _previousMouseState = Mouse.GetState();
-        }
+            IsMouseVisible = false;
+       }
 
-        private void UpdateRestaurantCamera(GameTime gameTime)
+       public void UpdateRestaurantCamera(GameTime gameTime)
         {
             MouseState currentMouseState = Mouse.GetState();
+            int centerX = GraphicsDevice.Viewport.Width / 2;
+            int centerY = GraphicsDevice.Viewport.Height / 2;
 
-            float deltaX = currentMouseState.X - _previousMouseState.X;
-            float deltaY = currentMouseState.Y - _previousMouseState.Y;
+            float deltaX = currentMouseState.X - centerX;
+            float deltaY = currentMouseState.Y - centerY;
 
             float sensitivity = 0.002f;
             yaw -= deltaX * sensitivity;
             pitch -= deltaY * sensitivity;
 
-            pitch = MathHelper.Clamp(pitch, -MathHelper.PiOver4, MathHelper.PiOver4);
+            pitch = MathHelper.Clamp(pitch, -MathHelper.PiOver2 + 0.1f, MathHelper.PiOver2 - 0.1f);
 
-            _previousMouseState = currentMouseState;
+            Mouse.SetPosition(centerX, centerY);
+            _previousMouseState = Mouse.GetState();
 
             Vector3 direction = new Vector3(
                 (float)(Math.Cos(pitch) * Math.Sin(yaw)),
                 (float)Math.Sin(pitch),
                 (float)(Math.Cos(pitch) * Math.Cos(yaw))
             );
+
+            Vector3 right = new Vector3(
+                (float)Math.Sin(yaw - MathHelper.PiOver2),
+                0f,
+                (float)Math.Cos(yaw - MathHelper.PiOver2)
+            );
+
+            KeyboardState keyboardState = Keyboard.GetState();
+            float moveSpeed = 4f * (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+            if (keyboardState.IsKeyDown(Keys.W))
+            {
+                cameraPosition += direction * moveSpeed;
+            }
+            if (keyboardState.IsKeyDown(Keys.S))
+            {
+                cameraPosition -= direction * moveSpeed;
+            }
+            if (keyboardState.IsKeyDown(Keys.A))
+            {
+                cameraPosition -= right * moveSpeed;
+            }
+            if (keyboardState.IsKeyDown(Keys.D))
+            {
+                cameraPosition += right * moveSpeed;
+            }
 
             Vector3 target = cameraPosition + direction;
 
@@ -771,181 +801,6 @@ namespace nomoredeleting
                 0.1f, 
                 100f
             );
-        }
-
-        private void DrawRestaurant3D()
-        {
-            GraphicsDevice.Clear(new Color(12, 20, 35));
-
-            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
-
-            _basicEffect.View = viewMatrix;
-            _basicEffect.Projection = projectionMatrix;
-            _basicEffect.World = Matrix.Identity;
-
-            DepthStencilState depthState = new DepthStencilState() { DepthBufferEnable = true };
-            GraphicsDevice.DepthStencilState = depthState;
-
-            foreach (var pass in _basicEffect.CurrentTechnique.Passes)
-            {
-                pass.Apply();
-
-            VertexPositionColor[] leftWallFront = new VertexPositionColor[]
-            {
-                new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 0f,  1f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, 1f), new Color(40, 45, 52)),
-
-                new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, 1f), new Color(40, 45, 52)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, 4f), new Color(40, 45, 52)),
-            };
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallFront, 0, 2);
-
-            VertexPositionColor[] leftWallBack = new VertexPositionColor[]
-            {
-                new VertexPositionColor(new Vector3(-7f, 0f, -1f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
-
-                new VertexPositionColor(new Vector3(-7f, 0f, -1f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, -1f), new Color(40, 45, 52)),
-            };
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallBack, 0, 2);
-
-            VertexPositionColor[] leftWallTop = new VertexPositionColor[]
-            {
-                new VertexPositionColor(new Vector3(-7f, 3.0f,  1f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 3.0f, -1f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, -1f), new Color(40, 45, 52)),
-
-                new VertexPositionColor(new Vector3(-7f, 3.0f,  1f), new Color(55, 60, 68)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f, -1f), new Color(40, 45, 52)),
-                new VertexPositionColor(new Vector3(-7f, 4.5f,  1f), new Color(40, 45, 52)),
-            };
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallTop, 0, 2);
-
-                VertexPositionColor[] ceilingVertices = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(20, 15, 12)),
-                    new VertexPositionColor(new Vector3( 7f, 4.5f, -7f), new Color(20, 15, 12)),
-                    new VertexPositionColor(new Vector3( 7f, 4.5f,  4f), new Color(20, 15, 12)),
-
-                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(20, 15, 12)),
-                    new VertexPositionColor(new Vector3( 7f, 4.5f,  4f), new Color(20, 15, 12)),
-                    new VertexPositionColor(new Vector3(-7f, 4.5f,  4f), new Color(20, 15, 12)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, ceilingVertices, 0, 2);
-
-                VertexPositionColor[] leftWallVertices = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
-                    new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(55, 60, 68)),
-                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
-
-                    new VertexPositionColor(new Vector3(-7f, 0f,  4f), new Color(55, 60, 68)),
-                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(40, 45, 52)),
-                    new VertexPositionColor(new Vector3(-7f, 4.5f,  4f), new Color(40, 45, 52)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, leftWallVertices, 0, 2);
-
-                VertexPositionColor[] rightWallVertices = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(7f, 0f, -7f), new Color(55, 60, 68)),
-                    new VertexPositionColor(new Vector3(7f, 0f,  4f), new Color(55, 60, 68)),
-                    new VertexPositionColor(new Vector3(7f, 4.5f,  4f), new Color(40, 45, 52)),
-
-                    new VertexPositionColor(new Vector3(7f, 0f, -7f), new Color(55, 60, 68)),
-                    new VertexPositionColor(new Vector3(7f, 4.5f,  4f), new Color(40, 45, 52)),
-                    new VertexPositionColor(new Vector3(7f, 4.5f, -7f), new Color(40, 45, 52)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, rightWallVertices, 0, 2);
-
-                VertexPositionColor[] backWallLeft = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3(-2.5f, 0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3(-2.5f, 4.5f, -7f), new Color(50, 38, 30)),
-
-                    new VertexPositionColor(new Vector3(-7f, 0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3(-2.5f, 4.5f, -7f), new Color(50, 38, 30)),
-                    new VertexPositionColor(new Vector3(-7f, 4.5f, -7f), new Color(50, 38, 30)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallLeft, 0, 2);
-
-                VertexPositionColor[] backWallRight = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(2.5f, 0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3(7f, 0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3(7f, 4.5f, -7f), new Color(50, 38, 30)),
-
-                    new VertexPositionColor(new Vector3(2.5f, 0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3(7f, 4.5f, -7f), new Color(50, 38, 30)),
-                    new VertexPositionColor(new Vector3(2.5f, 4.5f, -7f), new Color(50, 38, 30)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallRight, 0, 2);
-
-                VertexPositionColor[] backWallTop = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-2.5f, 3.0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3( 2.5f, 3.0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3( 2.5f, 4.5f, -7f), new Color(50, 38, 30)),
-
-                    new VertexPositionColor(new Vector3(-2.5f, 3.0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3( 2.5f, 4.5f, -7f), new Color(50, 38, 30)),
-                    new VertexPositionColor(new Vector3(-2.5f, 4.5f, -7f), new Color(50, 38, 30)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallTop, 0, 2);
-
-                VertexPositionColor[] backWallBottom = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-2.5f, 0.0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3( 2.5f, 0.0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3( 2.5f, 0.8f, -7f), new Color(55, 42, 33)),
-
-                    new VertexPositionColor(new Vector3(-2.5f, 0.0f, -7f), new Color(65, 50, 40)),
-                    new VertexPositionColor(new Vector3( 2.5f, 0.8f, -7f), new Color(55, 42, 33)),
-                    new VertexPositionColor(new Vector3(-2.5f, 0.8f, -7f), new Color(55, 42, 33)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, backWallBottom, 0, 2);
-
-                VertexPositionColor[] tableTopVertices = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-1.1f, 0.5f, -0.8f), new Color(90, 56, 32)),
-                    new VertexPositionColor(new Vector3( 1.1f, 0.5f, -0.8f), new Color(90, 56, 32)),
-                    new VertexPositionColor(new Vector3( 1.1f, 0.5f, -2.2f), new Color(75, 45, 25)),
-
-                    new VertexPositionColor(new Vector3(-1.1f, 0.5f, -0.8f), new Color(90, 56, 32)),
-                    new VertexPositionColor(new Vector3( 1.1f, 0.5f, -2.2f), new Color(75, 45, 25)),
-                    new VertexPositionColor(new Vector3(-1.1f, 0.5f, -2.2f), new Color(75, 45, 25)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, tableTopVertices, 0, 2);
-
-                VertexPositionColor[] tableStandVertices = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-0.15f, 0.0f, -1.4f), new Color(40, 25, 15)),
-                    new VertexPositionColor(new Vector3( 0.15f, 0.0f, -1.4f), new Color(40, 25, 15)),
-                    new VertexPositionColor(new Vector3( 0.15f, 0.5f, -1.4f), new Color(60, 38, 22)),
-
-                    new VertexPositionColor(new Vector3(-0.15f, 0.0f, -1.4f), new Color(40, 25, 15)),
-                    new VertexPositionColor(new Vector3( 0.15f, 0.5f, -1.4f), new Color(60, 38, 22)),
-                    new VertexPositionColor(new Vector3(-0.15f, 0.5f, -1.4f), new Color(60, 38, 22)),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, tableStandVertices, 0, 2);
-
-                VertexPositionColor[] cupVertices = new VertexPositionColor[]
-                {
-                    new VertexPositionColor(new Vector3(-0.12f, 0.5f, -1.4f), Color.Gold),
-                    new VertexPositionColor(new Vector3( 0.12f, 0.5f, -1.4f), Color.Gold),
-                    new VertexPositionColor(new Vector3( 0.12f, 0.85f, -1.4f), Color.Orange),
-
-                    new VertexPositionColor(new Vector3(-0.12f, 0.5f, -1.4f), Color.Gold),
-                    new VertexPositionColor(new Vector3( 0.12f, 0.85f, -1.4f), Color.Orange),
-                    new VertexPositionColor(new Vector3(-0.12f, 0.85f, -1.4f), Color.Orange),
-                };
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, cupVertices, 0, 2);
-            }
         }
     }
 }
